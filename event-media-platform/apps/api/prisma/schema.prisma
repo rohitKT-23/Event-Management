@@ -5,8 +5,7 @@
 // and analytics workloads described in the BRD.
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["fullTextSearchPostgres"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
