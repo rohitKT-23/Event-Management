@@ -1,0 +1,35 @@
+{
+  "name": "event-media-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Event & Media Management Platform — full-stack production-grade monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web,worker -c blue,green,yellow \"npm:dev -w @emp/api\" \"npm:dev -w @emp/web\" \"npm:dev:worker -w @emp/api\"",
+    "dev:api": "npm run dev -w @emp/api",
+    "dev:web": "npm run dev -w @emp/web",
+    "dev:worker": "npm run dev:worker -w @emp/api",
+    "build": "npm run build -w @emp/shared && npm run build -w @emp/api && npm run build -w @emp/web",
+    "lint": "npm run lint -w @emp/api && npm run lint -w @emp/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prisma:generate": "npm run prisma:generate -w @emp/api",
+    "prisma:migrate": "npm run prisma:migrate -w @emp/api",
+    "prisma:seed": "npm run prisma:seed -w @emp/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

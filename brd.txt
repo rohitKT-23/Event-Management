@@ -1,0 +1,443 @@
+═══════════════════════════════════════════════
+  EVENT & MEDIA MANAGEMENT PLATFORM
+  FULL-STACK, PRODUCTION-GRADE, END-TO-END
+═══════════════════════════════════════════════
+
+# ROLE & OBJECTIVE
+You are a senior full-stack engineer and architect. Your task is to build a complete, production-ready, scalable "Event & Media Management Platform" — a centralized system for clubs, photographers, and members to upload, organize, discover, and interact with event media. Build every layer: database, backend API, frontend UI, AI/ML pipelines, cloud infrastructure, real-time systems, and DevOps.
+
+Do NOT ask for clarification. Make sensible engineering decisions and proceed. Document every decision in code comments and README.
+
+═══════════════════════════════════════════════
+  TECH STACK (preferred — justify if you deviate)
+═══════════════════════════════════════════════
+
+## Frontend
+- Framework: Next.js 14 (App Router, SSR + SSG where applicable)
+- Styling: Tailwind CSS + shadcn/ui component library
+- State management: Zustand (global) + React Query / TanStack Query (server state)
+- Realtime: Socket.io client
+- File uploads: react-dropzone (drag-and-drop, multi-file, preview)
+- Image gallery: react-photo-album + yet-another-react-lightbox
+- Infinite scroll: react-infinite-scroll-component or Intersection Observer API
+- PWA: next-pwa with Workbox (service worker, offline caching, installable)
+- QR codes: qrcode.react
+- Video player: Video.js or Plyr
+- Forms: react-hook-form + zod validation
+- Charts/Analytics: Recharts
+
+## Backend
+- Runtime: Node.js with Express.js OR FastAPI (Python) — pick one, be consistent
+- Language: TypeScript (Node) or Python (FastAPI)
+- REST API with versioning: /api/v1/...
+- WebSockets: Socket.io (Node) or websockets (Python) for real-time notifications
+- Job queues: BullMQ (Node) or Celery (Python) for async tasks (AI tagging, compression, watermarking)
+- Rate limiting: express-rate-limit or slowapi
+- Input validation: zod (Node) or pydantic (Python)
+- API documentation: Swagger/OpenAPI auto-generated
+
+## Database
+- Primary DB: PostgreSQL (via Prisma ORM for Node OR SQLAlchemy for Python)
+- Cache: Redis (sessions, rate limits, notification queues, search cache)
+- Search: PostgreSQL full-text search (baseline) + optional Elasticsearch/Meilisearch for advanced search
+- Schema migrations: Prisma Migrate or Alembic
+
+## AI/ML Services
+- Image tagging: Google Cloud Vision API OR AWS Rekognition (auto-tagging: mountains, beach, sports, crowd, etc.)
+- Facial recognition: AWS Rekognition Face Indexing API (collection-based face matching)
+- AI captions: OpenAI GPT-4o Vision API (describe image → generate caption)
+- Duplicate detection: perceptual hashing (pHash) via sharp (Node) or imagehash (Python)
+- Image moderation: AWS Rekognition content moderation
+
+## Cloud & Storage
+- Object storage: AWS S3 (media files, watermarked downloads, thumbnails)
+- CDN: AWS CloudFront (serve media via CDN with signed URLs)
+- Image processing: Sharp (Node) or Pillow (Python) for resize, compress, watermark
+- Watermark rendering: Canvas API (server-side) or Sharp composite
+- Environment: AWS EC2 OR Railway/Render (for demo), with S3 mandatory
+
+## Auth
+- Strategy: JWT (access token short-lived 15min + refresh token 7d in httpOnly cookie)
+- OAuth2: Google OAuth (NextAuth.js or Passport.js)
+- Password hashing: bcrypt
+- Role-based access: middleware guard on every protected route
+
+## DevOps
+- Containerization: Docker + docker-compose (frontend, backend, postgres, redis, worker)
+- CI/CD: GitHub Actions (lint → test → build → deploy)
+- Env management: .env.example with all required keys documented
+
+═══════════════════════════════════════════════
+  DATABASE SCHEMA (build all these tables/models)
+═══════════════════════════════════════════════
+
+Build the following schema (add indexes, foreign keys, cascades properly):
+
+-- USERS
+users: id, username, email, password_hash, avatar_url, bio, role (ENUM: admin|photographer|club_member|viewer), face_embedding_id (AWS Rekognition face ID), is_verified, created_at, updated_at
+
+-- CLUBS
+clubs: id, name, description, logo_url, created_by (fk users), created_at
+
+club_memberships: id, club_id, user_id, role (admin|member), joined_at
+
+-- EVENTS
+events: id, club_id, name, slug, description, category (ENUM: photoshoot|workshop|trip|competition|cultural_fest|party|other), cover_image_url, date, location, is_public (bool), created_by, created_at, updated_at
+
+-- ALBUMS
+albums: id, event_id, name, description, is_public, created_by, created_at
+
+-- MEDIA
+media: id, album_id, event_id, uploader_id, file_url (S3 key), cdn_url (CloudFront), thumbnail_url, type (ENUM: photo|video), file_size, width, height, duration (video), is_public, ai_tags (jsonb array), ai_caption, phash (perceptual hash for dedup), moderation_status (ENUM: pending|approved|rejected), watermark_url, upload_status (ENUM: pending|processing|done|failed), created_at
+
+-- FACES
+face_index: id, media_id, user_id (nullable), rekognition_face_id, bounding_box (jsonb), confidence, created_at
+
+user_selfies: id, user_id, selfie_url, rekognition_face_id, created_at
+
+-- SOCIAL
+likes: id, user_id, media_id, created_at (unique: user+media)
+comments: id, user_id, media_id, parent_id (nullable, for replies), content, created_at, updated_at, is_deleted
+shares: id, user_id, media_id, platform (ENUM: link|instagram|twitter|whatsapp), created_at
+favourites: id, user_id, media_id, created_at
+tags: id, media_id, tagged_user_id, tagged_by, x_percent, y_percent (position on image), created_at
+downloads: id, user_id, media_id, downloaded_at, watermarked_url
+
+-- NOTIFICATIONS
+notifications: id, recipient_id, actor_id, type (ENUM: like|comment|tag|share|mention|upload), entity_type (media|event|album), entity_id, message, is_read, created_at
+
+-- SEARCH
+search_index: maintain a materialized view or search table with media_id, tags[], caption, event_name, uploader_name, album_name, upload_date for full-text search
+
+-- ANALYTICS
+media_views: id, media_id, viewer_id (nullable), ip_hash, viewed_at
+event_views: id, event_id, viewer_id (nullable), ip_hash, viewed_at
+
+═══════════════════════════════════════════════
+  BACKEND API — ALL ENDPOINTS
+═══════════════════════════════════════════════
+
+Implement all these REST endpoints with proper HTTP status codes, error messages, and auth guards:
+
+### AUTH
+POST   /api/v1/auth/register
+POST   /api/v1/auth/login
+POST   /api/v1/auth/logout
+POST   /api/v1/auth/refresh
+POST   /api/v1/auth/google (OAuth callback)
+POST   /api/v1/auth/forgot-password
+POST   /api/v1/auth/reset-password
+GET    /api/v1/auth/me
+
+### USERS
+GET    /api/v1/users/:id (public profile)
+PATCH  /api/v1/users/me (update profile, avatar)
+DELETE /api/v1/users/me
+GET    /api/v1/users/me/favourites
+GET    /api/v1/users/me/uploads
+GET    /api/v1/users/me/notifications
+PATCH  /api/v1/users/me/notifications/read-all
+POST   /api/v1/users/me/selfie (upload reference selfie for face match)
+GET    /api/v1/users/me/my-photos (photos where face detected)
+
+### CLUBS
+GET    /api/v1/clubs
+POST   /api/v1/clubs (admin only)
+GET    /api/v1/clubs/:id
+PATCH  /api/v1/clubs/:id
+DELETE /api/v1/clubs/:id
+POST   /api/v1/clubs/:id/members (invite/add member)
+DELETE /api/v1/clubs/:id/members/:userId
+GET    /api/v1/clubs/:id/members
+
+### EVENTS
+GET    /api/v1/events (filter: club, category, date range, search query, sort)
+POST   /api/v1/events
+GET    /api/v1/events/:id
+PATCH  /api/v1/events/:id
+DELETE /api/v1/events/:id
+GET    /api/v1/events/:id/albums
+GET    /api/v1/events/:id/media
+POST   /api/v1/events/:id/qr (generate QR code for album sharing)
+
+### ALBUMS
+POST   /api/v1/albums
+GET    /api/v1/albums/:id
+PATCH  /api/v1/albums/:id
+DELETE /api/v1/albums/:id
+GET    /api/v1/albums/:id/media
+POST   /api/v1/albums/:id/collaborators (collaborative albums)
+
+### MEDIA UPLOAD
+POST   /api/v1/media/upload (single, multipart/form-data → S3 → processing queue)
+POST   /api/v1/media/upload-bulk (multiple files, returns job IDs)
+GET    /api/v1/media/upload-status/:jobId (poll status)
+POST   /api/v1/media/presigned-url (get S3 presigned URL for direct browser upload)
+GET    /api/v1/media/:id
+PATCH  /api/v1/media/:id (edit caption, tags, privacy)
+DELETE /api/v1/media/:id
+GET    /api/v1/media/:id/download (trigger watermark → return signed download URL)
+
+### SOCIAL
+POST   /api/v1/media/:id/like
+DELETE /api/v1/media/:id/like
+GET    /api/v1/media/:id/likes
+POST   /api/v1/media/:id/comment
+GET    /api/v1/media/:id/comments (threaded)
+PATCH  /api/v1/comments/:id
+DELETE /api/v1/comments/:id
+POST   /api/v1/media/:id/share
+POST   /api/v1/media/:id/favourite
+DELETE /api/v1/media/:id/favourite
+POST   /api/v1/media/:id/tag (tag a user on photo with x,y coords)
+DELETE /api/v1/media/:id/tag/:tagId
+GET    /api/v1/media/:id/tags
+
+### SEARCH
+GET    /api/v1/search?q=&type=media|event|user&tags=&date_from=&date_to=&event_id=&uploader=
+
+### AI
+POST   /api/v1/ai/retag/:mediaId (manually trigger re-tagging)
+POST   /api/v1/ai/regenerate-caption/:mediaId
+GET    /api/v1/ai/moderation-queue (admin: review flagged content)
+PATCH  /api/v1/ai/moderation/:mediaId (approve/reject)
+
+### ANALYTICS (admin/photographer)
+GET    /api/v1/analytics/events/:id (views, downloads, likes over time)
+GET    /api/v1/analytics/media/top (most liked, downloaded, viewed)
+GET    /api/v1/analytics/overview (total uploads, users, events)
+
+### ADMIN
+GET    /api/v1/admin/users
+PATCH  /api/v1/admin/users/:id/role
+DELETE /api/v1/admin/users/:id
+GET    /api/v1/admin/media (all media, filter by moderation_status)
+
+═══════════════════════════════════════════════
+  FRONTEND — ALL PAGES & COMPONENTS
+═══════════════════════════════════════════════
+
+## Public Pages (no auth required)
+/ (landing page: hero, features, CTA, public event highlights)
+/login (email+password + Google OAuth button)
+/register (username, email, password, role selector)
+/forgot-password
+/reset-password/:token
+/events (public events list, filter by category/date/club, search bar)
+/events/:id (event detail: cover, description, albums list)
+/albums/:id (photo gallery with infinite scroll, masonry/grid toggle)
+/media/:id (single media view: full image/video, metadata, likes, comments, tags, share)
+/u/:username (public user profile: uploads, bio)
+/qr/:albumId (QR landing page: auto-redirect to album)
+
+## Authenticated Pages
+/dashboard (personalized feed of events from joined clubs + recent uploads)
+/my-photos (photos where user's face detected via facial recognition)
+/favourites (saved/favourited media)
+/notifications (all notifications, mark read, filter by type)
+/profile/edit (update bio, avatar, upload selfie for face detection)
+/upload (drag-and-drop uploader, select album/event, preview before submit, progress bars)
+/clubs (joined clubs list + discover clubs)
+/clubs/:id (club page: description, members, events)
+/clubs/:id/manage (admin: manage members, roles, settings)
+
+## Admin Dashboard (/admin/*)
+/admin (overview metrics cards)
+/admin/users (table: all users, role change, ban/delete)
+/admin/events (all events management)
+/admin/media (moderation queue: approve/reject flagged images)
+/admin/analytics (charts: upload trends, active users, top events)
+
+## Key UI Components to Build
+- Navbar (logo, search, notification bell with unread count, avatar menu)
+- NotificationDropdown (real-time, grouped by type, mark-read on hover)
+- MediaCard (thumbnail, like button, comment count, favourite toggle, hover overlay)
+- InfiniteGallery (masonry layout, infinite scroll, skeleton loading)
+- Lightbox (full-screen image/video, prev/next, EXIF data, comment panel, tag pins on image)
+- UploadZone (drag-drop, file preview grid, compression progress, per-file status)
+- EventCard (cover image, date, category badge, club name, media count)
+- SearchBar (debounced, suggestions dropdown: events, tags, users)
+- TagPicker (click on image to tag user: show user search popup at click coords)
+- WatermarkPreview (show watermark position before download confirmation)
+- QRModal (generate + display QR code for album, copy link, download QR image)
+- StoryViewer (story/highlight feature: fullscreen auto-advancing slideshow)
+- AnalyticsChart (line chart: views/likes/downloads over time)
+- CollaboratorsPanel (add/remove album collaborators)
+- FaceMatchSection (selfie upload + matched photos grid in /my-photos)
+- ImageModerationCard (admin: flagged image preview, approve/reject buttons)
+- DuplicateWarningBanner (shown during upload if pHash match detected)
+
+═══════════════════════════════════════════════
+  AI/ML PIPELINES — IMPLEMENT IN FULL
+═══════════════════════════════════════════════
+
+## Pipeline 1: Post-Upload Processing (async job via BullMQ/Celery)
+When a file is uploaded to S3, enqueue a job that does:
+1. Download file from S3 to temp
+2. Compression: resize to max 2048px wide, compress JPEG quality 85 (Sharp/Pillow)
+3. Generate thumbnail: 400x400 cover crop
+4. pHash duplicate detection: compute perceptual hash, compare against existing hashes in DB (Hamming distance < 10 = duplicate warning)
+5. AI tagging: call AWS Rekognition detect_labels → extract top 10 labels, store in media.ai_tags
+6. Content moderation: call AWS Rekognition detect_moderation_labels → flag if unsafe content found (set moderation_status = pending if flagged)
+7. AI caption generation: call GPT-4o Vision with the image → generate 1-sentence caption, store in media.ai_caption
+8. Facial recognition: call AWS Rekognition index_faces → store all detected faces in face_index table
+9. Face-to-user matching: for each detected face_id, query user_selfies table, call search_faces_by_image to find matching user → update face_index.user_id, create notification ("You were tagged in a photo at [event]")
+10. Update media.upload_status = done
+11. Emit WebSocket event to uploader: upload-complete with final media data
+
+## Pipeline 2: Watermark on Download
+When user requests download:
+1. Check if watermarked version already exists in S3 (cache hit → serve immediately)
+2. If not: download original from S3, overlay watermark using Sharp composite:
+   - Club name (top-left)
+   - Event name (bottom-left)
+   - User role badge (bottom-right)
+   - Subtle diagonal club logo watermark at 15% opacity
+3. Upload watermarked version to S3 /watermarked/ prefix
+4. Record download in downloads table
+5. Return signed S3 URL (expires in 5 min) for browser download
+
+## Pipeline 3: Facial Recognition — My Photos
+When user uploads selfie (/profile/edit → selfie upload):
+1. Upload selfie to S3
+2. Call AWS Rekognition index_faces with the selfie → get face_id
+3. Store in user_selfies (user_id, selfie_url, rekognition_face_id)
+4. Run search_faces_by_image against the entire Rekognition collection
+5. Find all media where matching faces were detected (face_index table)
+6. Update face_index.user_id for all matches
+7. Return list of matched media → show in /my-photos
+
+## Pipeline 4: Smart Search
+Build a search that queries across:
+- media.ai_tags (array contains match)
+- media.ai_caption (full-text)
+- events.name, events.description (full-text)
+- users.username (prefix match)
+- albums.name
+- Upload date range filter
+Use PostgreSQL tsvector + GIN index for full-text. Return grouped results: events, media, users.
+
+═══════════════════════════════════════════════
+  REAL-TIME NOTIFICATIONS (WebSocket)
+═══════════════════════════════════════════════
+
+Implement Socket.io (or ws) server with:
+- Authenticated connections (verify JWT on handshake)
+- User rooms: socket.join(`user:${userId}`)
+- Events to emit to recipient:
+  notification:new → { type, message, entity, actor, timestamp }
+  upload:complete → { mediaId, status, thumbnailUrl }
+  upload:progress → { jobId, percent } (during bulk upload)
+
+- Notification triggers (emit + persist to DB):
+  * Someone liked your photo → to photo uploader
+  * Someone commented on your photo → to photo uploader
+  * Someone replied to your comment → to comment author
+  * You were tagged in a photo → to tagged user
+  * Your face was detected in a photo → to matched user
+  * Someone shared your photo → to uploader
+  * New photo uploaded to an event you follow → to event followers
+  * Upload processing complete → to uploader
+
+- Frontend: show toast notification + increment bell badge in real-time
+- Notification center: paginated list, mark-as-read individually or all, filter by type
+
+═══════════════════════════════════════════════
+  ACCESS CONTROL — IMPLEMENT FULLY
+═══════════════════════════════════════════════
+
+Four roles with permissions:
+
+VIEWER:
+- View public events, albums, media
+- Like, comment, share, download public media
+- Upload selfie for face matching on public events
+- Cannot access private events/albums
+
+CLUB_MEMBER:
+- All viewer permissions
+- View private events/albums of clubs they belong to
+- Upload media to events of their clubs
+- Tag users, add to favourites
+
+PHOTOGRAPHER:
+- All club_member permissions
+- Bulk upload, manage their own uploads
+- Edit/delete their own media
+- Retrigger AI tagging
+- View analytics for their uploads
+
+ADMIN:
+- All permissions
+- Create/delete events, clubs, albums
+- Manage all media (including others')
+- Moderation queue access
+- User role management
+- View full analytics dashboard
+- System-wide settings
+
+Implement as middleware: authenticate → extractRole → authorize(requiredRole)
+Also implement: resource-level ownership check (can only edit/delete your own content unless admin)
+
+═══════════════════════════════════════════════
+  CLOUD ARCHITECTURE — AWS SETUP
+═══════════════════════════════════════════════
+
+Implement the following (use AWS SDK v3):
+
+S3 BUCKETS:
+- {app}-media-original (private, IAM-only access)
+- {app}-media-processed (private, CloudFront-served)
+- {app}-watermarked (private, presigned URL download)
+- {app}-avatars (public-read for profile pics)
+- {app}-selfies (private, AI processing only)
+
+CloudFront:
+- Distribution for -media-processed bucket
+- Signed URLs for private media (valid 1 hour)
+- Public access for public media
+- Cache policy: image/video files cached 7 days
+
+S3 Upload flow:
+- Backend generates presigned POST URL
+- Browser uploads directly to S3 (bypasses backend, reduces server load)
+- S3 triggers Lambda OR backend receives webhook → enqueues processing job
+
+Image processing:
+- All original images preserved in -original bucket
+- Processed (compressed + thumbnail) stored in -processed
+- CloudFront URL stored in media.cdn_url
+
+═══════════════════════════════════════════════
+  ALL BONUS FEATURES — BUILD THESE TOO
+═══════════════════════════════════════════════
+
+## From the problem statement:
+1. Infinite scrolling gallery (Intersection Observer, load 20 at a time)
+2. QR-based album sharing (generate QR → /qr/:albumId page → redirect to album)
+3. Story/highlight feature (Instagram-like: select photos → create story → fullscreen auto-advance viewer with 5s timer)
+4. Collaborative albums (multiple photographers can upload to same album, with contributor list)
+5. AI-generated captions (GPT-4o Vision, shown below each photo, editable by uploader)
+6. Analytics dashboard (admin: charts for uploads/day, most active events, top photographers, download counts)
+7. Progressive Web App (manifest.json, service worker via next-pwa, offline gallery caching, installable on mobile)
+8. Offline caching (cache visited events and their thumbnail grids in service worker for offline browsing)
+9. Image moderation system (auto-flagging via Rekognition + admin review queue with approve/reject)
+10. Duplicate image detection (pHash comparison on upload, warn user with side-by-side comparison)
+
+## Additional features NOT listed anywhere — implement these:
+11. EXIF data extraction: extract and display camera model, focal length, ISO, shutter speed, GPS location (if present) on media detail page
+12. Photo map view: if EXIF GPS exists, show all event photos pinned on a Mapbox/Leaflet map
+13. Dark mode: full dark/light mode toggle with system preference detection (Tailwind dark: classes)
+14. Multi-language i18n: i18next setup with English and Hindi locale files
+15. Email notifications: Nodemailer/SendGrid — send email for: account verification, password reset, weekly digest ("5 new photos from events you follow")
+16. Bulk download as ZIP: select multiple photos → server zips them (with watermarks) → returns download link (archiver library)
+17. HEIC/RAW file support: auto-convert HEIC (iPhone photos) to JPEG on upload using sharp or heic-convert
+18. Video support: accept MP4, MOV, AVI → transcode to H.264 MP4 + generate poster thumbnail using ffmpeg
+19. Media comments with image replies: allow attaching an image in comments (like Twitter)
+20. Keyboard navigation in lightbox: arrow keys, Escape to close, Space to like, F to favourite
+21. Event RSVP / attendance tracking: members can mark "I attended this event" → link to their face-matched photos
+22. Rate limiting on uploads: max 500MB per user per day (tracked in Redis)
+23. Virus/malware scanning: ClamAV or VirusTotal API check on uploaded files before processing
+24. Media expiry: event organizer can set media auto-delete date (stored in DB, cron job deletes expired)
+25. Photographer portfolio page: /photographer/:id with grid of their best uploads, stats, downloadable portfolio PDF
+26. Embed widget: generate 

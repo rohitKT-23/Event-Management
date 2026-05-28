@@ -1,0 +1,522 @@
+// Event & Media Management Platform — database schema
+// PostgreSQL + Prisma ORM. Every model mirrors the BRD exactly.
+// Indexes are added on every foreign key and on common query
+// columns (slugs, dates, hashes) to support the gallery, search
+// and analytics workloads described in the BRD.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  ENUMS
+// ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  PHOTOGRAPHER
+  CLUB_MEMBER
+  VIEWER
+}
+
+enum ClubRole {
+  ADMIN
+  MEMBER
+}
+
+enum EventCategory {
+  PHOTOSHOOT
+  WORKSHOP
+  TRIP
+  COMPETITION
+  CULTURAL_FEST
+  PARTY
+  OTHER
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum UploadStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum SharePlatform {
+  LINK
+  INSTAGRAM
+  TWITTER
+  WHATSAPP
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  TAG
+  SHARE
+  MENTION
+  UPLOAD
+  FACE_MATCH
+}
+
+enum NotificationEntityType {
+  MEDIA
+  EVENT
+  ALBUM
+  COMMENT
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  USERS
+// ──────────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  username        String   @unique
+  email           String   @unique
+  passwordHash    String?  // null when user signs up via OAuth only
+  avatarUrl       String?
+  bio             String?
+  role            UserRole @default(VIEWER)
+  faceEmbeddingId String?  // AWS Rekognition primary face id (from selfie)
+  isVerified      Boolean  @default(false)
+  googleId        String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // relations
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordReset[]
+  createdClubs      Club[]              @relation("ClubCreator")
+  clubMemberships   ClubMembership[]
+  createdEvents     Event[]             @relation("EventCreator")
+  createdAlbums     Album[]             @relation("AlbumCreator")
+  albumCollabs      AlbumCollaborator[]
+  uploadedMedia    Media[]             @relation("MediaUploader")
+  selfies           UserSelfie[]
+  detectedFaces     FaceIndex[]
+  likes             Like[]
+  comments          Comment[]
+  shares            Share[]
+  favourites        Favourite[]
+  tagsAuthored      MediaTag[]          @relation("TagAuthor")
+  tagsReceived      MediaTag[]          @relation("TaggedUser")
+  downloads        Download[]
+  notifications     Notification[]      @relation("NotificationRecipient")
+  triggered         Notification[]      @relation("NotificationActor")
+  mediaViews        MediaView[]
+  eventViews        EventView[]
+  attendances       EventAttendance[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  CLUBS
+// ──────────────────────────────────────────────────────────────────
+
+model Club {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   User             @relation("ClubCreator", fields: [createdById], references: [id])
+  memberships ClubMembership[]
+  events      Event[]
+
+  @@index([createdById])
+}
+
+model ClubMembership {
+  id       String   @id @default(cuid())
+  clubId   String
+  userId   String
+  role     ClubRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([userId])
+  @@index([clubId, role])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  EVENTS
+// ──────────────────────────────────────────────────────────────────
+
+model Event {
+  id            String        @id @default(cuid())
+  clubId        String
+  name          String
+  slug          String        @unique
+  description   String?
+  category      EventCategory
+  coverImageUrl String?
+  date          DateTime
+  location      String?
+  isPublic      Boolean       @default(true)
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  expiresAt     DateTime?     // bonus: media expiry / auto-delete
+
+  club        Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("EventCreator", fields: [createdById], references: [id])
+  albums      Album[]
+  media       Media[]
+  views       EventView[]
+  attendances EventAttendance[]
+
+  @@index([clubId])
+  @@index([date])
+  @@index([category])
+  @@index([isPublic])
+  @@index([createdById])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  ALBUMS
+// ──────────────────────────────────────────────────────────────────
+
+model Album {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?
+  isPublic    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy     User                @relation("AlbumCreator", fields: [createdById], references: [id])
+  collaborators AlbumCollaborator[]
+  media         Media[]
+
+  @@index([eventId])
+  @@index([createdById])
+}
+
+model AlbumCollaborator {
+  id       String   @id @default(cuid())
+  albumId  String
+  userId   String
+  addedAt  DateTime @default(now())
+
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([albumId, userId])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  MEDIA
+// ──────────────────────────────────────────────────────────────────
+
+model Media {
+  id               String           @id @default(cuid())
+  albumId          String?
+  eventId          String?
+  uploaderId       String
+  s3Key            String           @unique   // original file key
+  cdnUrl           String?                    // CloudFront URL (processed)
+  thumbnailUrl     String?
+  type             MediaType
+  mimeType         String
+  fileSize         BigInt
+  width            Int?
+  height           Int?
+  durationSeconds  Float?                    // for video
+  isPublic         Boolean          @default(true)
+  aiTags           String[]         @default([])
+  aiCaption        String?
+  phash            String?                   // perceptual hash for dedup
+  exif             Json?                     // EXIF metadata (camera, GPS...)
+  gpsLatitude      Float?
+  gpsLongitude     Float?
+  moderationStatus ModerationStatus @default(APPROVED)
+  moderationReason String?
+  watermarkUrl     String?
+  uploadStatus     UploadStatus     @default(PENDING)
+  uploadJobId      String?                   // BullMQ job id for status polls
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  album      Album?      @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  event      Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  uploader   User        @relation("MediaUploader", fields: [uploaderId], references: [id])
+  faces      FaceIndex[]
+  likes      Like[]
+  comments   Comment[]
+  shares     Share[]
+  favourites Favourite[]
+  tags       MediaTag[]
+  downloads  Download[]
+  views      MediaView[]
+
+  @@index([albumId])
+  @@index([eventId])
+  @@index([uploaderId])
+  @@index([type])
+  @@index([moderationStatus])
+  @@index([uploadStatus])
+  @@index([phash])
+  @@index([createdAt])
+  @@index([aiTags], type: Gin)
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  FACES
+// ──────────────────────────────────────────────────────────────────
+
+model FaceIndex {
+  id                String   @id @default(cuid())
+  mediaId           String
+  userId            String?  // resolved after face-to-user match
+  rekognitionFaceId String
+  boundingBox       Json
+  confidence        Float
+  createdAt         DateTime @default(now())
+
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([mediaId])
+  @@index([userId])
+  @@index([rekognitionFaceId])
+}
+
+model UserSelfie {
+  id                String   @id @default(cuid())
+  userId            String
+  selfieUrl         String
+  rekognitionFaceId String   @unique
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  SOCIAL
+// ──────────────────────────────────────────────────────────────────
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+  @@index([mediaId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   String
+  parentId  String?
+  content   String
+  imageUrl  String?  // bonus: image attachments in comments
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media   Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([mediaId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Share {
+  id        String        @id @default(cuid())
+  userId    String
+  mediaId   String
+  platform  SharePlatform
+  createdAt DateTime      @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+  @@index([userId])
+}
+
+model Favourite {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+  @@index([userId])
+}
+
+model MediaTag {
+  id            String   @id @default(cuid())
+  mediaId       String
+  taggedUserId  String
+  taggedById    String
+  xPercent      Float
+  yPercent      Float
+  createdAt     DateTime @default(now())
+
+  media       Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  taggedUser  User  @relation("TaggedUser", fields: [taggedUserId], references: [id], onDelete: Cascade)
+  taggedBy    User  @relation("TagAuthor", fields: [taggedById], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, taggedUserId])
+  @@index([mediaId])
+  @@index([taggedUserId])
+}
+
+model Download {
+  id              String   @id @default(cuid())
+  userId          String
+  mediaId         String
+  watermarkedUrl  String?
+  bytesServed     BigInt?
+  downloadedAt    DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mediaId])
+  @@index([downloadedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  NOTIFICATIONS
+// ──────────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String                 @id @default(cuid())
+  recipientId String
+  actorId     String?
+  type        NotificationType
+  entityType  NotificationEntityType
+  entityId    String
+  message     String
+  payload     Json?
+  isRead      Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt])
+  @@index([type])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  ANALYTICS
+// ──────────────────────────────────────────────────────────────────
+
+model MediaView {
+  id       String   @id @default(cuid())
+  mediaId  String
+  viewerId String?
+  ipHash   String?
+  viewedAt DateTime @default(now())
+
+  media  Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  viewer User? @relation(fields: [viewerId], references: [id], onDelete: SetNull)
+
+  @@index([mediaId, viewedAt])
+  @@index([viewerId])
+}
+
+model EventView {
+  id       String   @id @default(cuid())
+  eventId  String
+  viewerId String?
+  ipHash   String?
+  viewedAt DateTime @default(now())
+
+  event  Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  viewer User? @relation(fields: [viewerId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, viewedAt])
+}
+
+// Bonus: RSVP / attendance tracking
+model EventAttendance {
+  id          String   @id @default(cuid())
+  eventId     String
+  userId      String
+  attendedAt  DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+}
