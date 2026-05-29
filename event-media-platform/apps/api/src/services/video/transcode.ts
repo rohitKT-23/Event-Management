@@ -34,6 +34,43 @@ async function loadFfmpeg(): Promise<any | null> {
   }
 }
 
+/**
+ * Transcode an arbitrary input video to a web-friendly H.264/AAC MP4
+ * (`-vcodec libx264 -acodec aac -crf 23`). Returns null (graceful) when
+ * ffmpeg is unavailable or the transcode fails, so uploads never break.
+ */
+export async function transcodeToH264(input: Buffer): Promise<Buffer | null> {
+  const ffmpeg = await loadFfmpeg();
+  if (!ffmpeg) {
+    logger.debug('ffmpeg not available — skipping video transcode');
+    return null;
+  }
+
+  const tmpDir = os.tmpdir();
+  const inPath = path.join(tmpDir, `emp-${randomUUID()}.video`);
+  const outPath = path.join(tmpDir, `emp-${randomUUID()}.mp4`);
+
+  try {
+    await fs.writeFile(inPath, input);
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(inPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions(['-crf 23', '-preset veryfast', '-movflags +faststart'])
+        .on('end', () => resolve())
+        .on('error', (err: unknown) => reject(err))
+        .save(outPath);
+    });
+    return await fs.readFile(outPath).catch(() => null);
+  } catch (err) {
+    logger.warn({ err }, 'video transcode failed (continuing)');
+    return null;
+  } finally {
+    await fs.unlink(inPath).catch(() => undefined);
+    await fs.unlink(outPath).catch(() => undefined);
+  }
+}
+
 export async function generateVideoPoster(input: Buffer): Promise<VideoProcessingResult> {
   const ffmpeg = await loadFfmpeg();
   if (!ffmpeg) {

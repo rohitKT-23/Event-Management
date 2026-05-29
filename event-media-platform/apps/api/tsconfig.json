@@ -9,7 +9,8 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@prisma/client": ["src/generated/prisma/client"]
     },
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true

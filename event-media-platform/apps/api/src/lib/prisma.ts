@@ -1,15 +1,19 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client.js';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { env, isProd } from '../config/env.js';
 
-// Single, reused PrismaClient. In dev we attach to globalThis so the
-// hot-reload from tsx doesn't open a new pool on every restart.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createClient(): PrismaClient {
+  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+  return new PrismaClient({
+    adapter,
     log: isProd ? ['error', 'warn'] : ['error', 'warn'],
-    datasources: { db: { url: env.DATABASE_URL } },
   });
+}
+
+export const prisma = globalForPrisma.prisma ?? createClient();
 
 if (!isProd) globalForPrisma.prisma = prisma;
+
+export { PrismaClient };

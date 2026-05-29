@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bell, LogOut, Moon, Sun, Upload, User, Search, Languages } from 'lucide-react';
+import { LogOut, Moon, Sun, Upload, User, Search, Languages } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { NotificationDropdown } from '@/components/notification-dropdown';
+import { SearchBar } from '@/components/search-bar';
 
 export function Navbar() {
   const { user, clear } = useAuthStore();
@@ -41,6 +43,9 @@ export function Navbar() {
             <Link href="/events">{t('nav.events')}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
+            <Link href="/clubs">{t('nav.clubs')}</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link href="/my-photos">{t('nav.myPhotos')}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
@@ -54,12 +59,11 @@ export function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
-          <Button asChild variant="ghost" size="icon" aria-label="Search">
+          <SearchBar />
+          <Button asChild variant="ghost" size="icon" aria-label="Search" className="sm:hidden">
             <Link href="/search"><Search className="h-4 w-4" /></Link>
           </Button>
-          <Button asChild variant="ghost" size="icon" aria-label="Notifications">
-            <Link href="/notifications"><Bell className="h-4 w-4" /></Link>
-          </Button>
+          <NotificationDropdown />
           <Button
             variant="ghost"
             size="icon"

@@ -20,7 +20,7 @@ import { env } from '../config/env.js';
 import { extractExif } from '../lib/exif.js';
 import { convertHeicToJpeg, isHeic } from '../lib/heic.js';
 import { scanBuffer } from '../services/security/virusScan.js';
-import { generateVideoPoster } from '../services/video/transcode.js';
+import { generateVideoPoster, transcodeToH264 } from '../services/video/transcode.js';
 import { matchFacesToUsers } from '../services/faces.js';
 
 async function downloadFromS3(bucket: string, key: string): Promise<Buffer> {
@@ -116,6 +116,7 @@ async function processJob(job: Job<MediaProcessingJob>) {
     let width: number | null = null;
     let height: number | null = null;
     let durationSeconds: number | null = null;
+    let transcodedKey: string | null = null;
 
     if (isVideo) {
       // Step V: generate a poster thumbnail via ffmpeg (graceful if unavailable).
@@ -126,6 +127,13 @@ async function processJob(job: Job<MediaProcessingJob>) {
           .resize(400, 400, { fit: 'cover' })
           .jpeg({ quality: 80 })
           .toBuffer();
+      }
+
+      // Step V2: transcode to a web-friendly H.264 MP4 (graceful if unavailable).
+      const transcoded = await transcodeToH264(original);
+      if (transcoded) {
+        transcodedKey = `processed/${key.replace(/^media\//, '')}.mp4`;
+        await uploadToS3(BUCKETS.PROCESSED, transcodedKey, transcoded, 'video/mp4');
       }
     } else {
       const meta = await sharp(original).metadata();
@@ -246,7 +254,7 @@ async function processJob(job: Job<MediaProcessingJob>) {
     const updated = await prisma.media.update({
       where: { id: mediaId },
       data: {
-        cdnUrl: processedBuf ? processedKey : key,
+        cdnUrl: processedBuf ? processedKey : transcodedKey ?? key,
         thumbnailUrl: thumbBuf ? thumbKey : null,
         width,
         height,

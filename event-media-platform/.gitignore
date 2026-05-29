@@ -40,6 +40,7 @@ Thumbs.db
 
 # Prisma
 apps/api/prisma/migrations/dev/
+apps/api/src/generated/
 
 # Uploads (local dev)
 uploads/

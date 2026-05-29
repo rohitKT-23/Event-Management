@@ -232,12 +232,26 @@ scaffolded with TODO markers and are next on the list.
       language switcher
 - [x] Docker compose stack, multi-stage Dockerfiles, GitHub Actions CI
 
+### Recently completed
+- [x] Events CRUD UI (`/events/new`, `/events/:id/edit`) + albums section, sort/filter
+- [x] Clubs UI: list, detail (events/members/about), manage (roles, invite, settings)
+- [x] `/albums/:id` gallery with reusable `InfiniteGallery` + full-screen `Lightbox`
+- [x] `/search` page + global `SearchBar` (debounced quick results, URL-synced filters)
+- [x] Upload UX: searchable event/album pickers, inline album create, duplicate warning
+- [x] Public profile `/u/:username` + photographer portfolio `/photographer/:username` (PDF)
+- [x] Admin `/admin/events` (filters + bulk delete) and `/admin/analytics` (Recharts)
+- [x] QR sharing (`QRModal` + `/qr/:id` landing), TagPicker, WatermarkPreview, inline caption edit
+- [x] Collaborative albums panel; Stories: backend CRUD + `Story` table + `StoryViewer` + create modal
+- [x] **Photo map** view (`/events/:id/map`, react-leaflet) using persisted EXIF GPS
+- [x] **Full H.264 video transcode** in worker (`-crf 23`, faststart) + poster frame
+- [x] **Weekly-digest cron** (`node-cron`, Sunday 09:00 IST) in the worker process
+- [x] Keyboard shortcuts help modal (`?`); architecture + DB-schema docs under `docs/`
+- [x] Production deployment guide (`docs/deployment.md`) + `.env.example`
+
 ### Next up
-- [ ] Photo map view (Leaflet/Mapbox) using the now-persisted EXIF GPS.
-- [ ] Full H.264 video transcode + adaptive renditions (poster + duration done).
-- [ ] Expand i18n coverage to every page (infra + nav done today).
-- [ ] Weekly-digest cron trigger (queue + template already wired).
+- [ ] Expand i18n coverage to every remaining page (infra + nav + key flows done).
 - [ ] Generate PNG app icons (a vector `icon.svg` ships today).
+- [ ] Stand up the live demo URL and record it here (see `docs/deployment.md`).
 
 ---
 
@@ -266,7 +280,7 @@ BullMQ `email` worker.
 |---------|----------|------|
 | Register | `verify-email` | Queued after account creation |
 | `POST /auth/forgot-password` | `password-reset` | 1-hour reset link |
-| Weekly digest helper | `weekly-digest` | Call `enqueueWeeklyDigestForUser(userId)` (cron TBD) |
+| Weekly digest | `weekly-digest` | `node-cron` in the worker, every Sunday 09:00 IST (per-user idempotency key) |
 
 Configure in `.env`:
 

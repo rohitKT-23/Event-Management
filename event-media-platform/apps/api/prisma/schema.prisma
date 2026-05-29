@@ -5,12 +5,12 @@
 // and analytics workloads described in the BRD.
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -504,6 +504,21 @@ model EventView {
   viewer User? @relation(fields: [viewerId], references: [id], onDelete: SetNull)
 
   @@index([eventId, viewedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  STORIES / HIGHLIGHTS (standalone — references kept as scalar ids)
+// ──────────────────────────────────────────────────────────────────
+
+model Story {
+  id        String   @id @default(cuid())
+  eventId   String
+  creatorId String
+  mediaIds  Json // ordered array of media ids
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+  @@index([creatorId])
 }
 
 // Bonus: RSVP / attendance tracking

@@ -1,0 +1,137 @@
+Event & Media Management Platform  
+Overview 
+Clubs and societies frequently organize events such as photoshoots, workshops, trips, competitions, 
+cultural fests, and parties. During these events, a large number of photos and videos are generated. 
+However, this media is usually scattered across multiple Google Drives, personal folders, and cloud 
+storage links. 
+This creates major issues in organizing, searching, sharing, and managing event media efficiently.  
+The goal of this problem statement is to build a centralized Event & Media Management Platform 
+where clubs, photographers, and members can upload, organize, access, and interact with media 
+content seamlessly.  
+Problem Statement  
+Build a scalable web platform that allows photographers and organizers to upload event media and 
+manage it efficiently. The platform should support:  
+• Event-wise media organization  
+• Public and private access control  
+• Social-media-like interactions  
+• AI-powered image tagging and search  
+• Cloud-based media storage  
+• Personalized photo discovery using facial recognition  
+Core Features  
+1) Event Management  
+Participants should implement:  
+• Create and manage events  
+• Event-wise albums  
+• Event descriptions and metadata  
+• Sorting by:  
+o Event name  
+o Date  
+o Category  
+2) Media Upload System  
+The platform should support:  
+• Uploading photos and videos  
+• Bulk uploads  
+• Drag-and-drop upload support  
+• Media preview before upload  
+• Optimized storage and compression  
+3) Access Control & Authentication  
+The system should provide:  
+• Public Media: Accessible by everyone.  
+• Private Media: Accessible only to authorized club members.  
+• Suggested Roles:  
+o Admin  
+o Photographer  
+o Club Member  
+o Viewer  
+4) Social Features  
+The platform should include social interaction features such as:  
+• Like  
+• Comment  
+• Share  
+• Download  
+• Add to favourites  
+• Tag friends/users  
+• Real-time notifications  
+(Example notifications):  
+• Someone liked your photo  
+• Someone tagged you  
+• Someone commented on your upload  
+5) AI/ML Features  
+• Smart Image Tagging: Automatically generate tags such as:- mountains, beaches, sports, 
+crowd etc.  
+• Advanced Search: Allow users to search by Event name, Tags, Upload date, and User name.  
+• Facial Recognition Feature  
+Users should be able to:  
+1. Upload a reference selfie  
+2. Detect photos containing that user  
+3. Display all matching photos in a separate personalized section  
+6) Cloud Integration 
+To increase scalability and industry relevance, participants should integrate cloud services.  
+• Suggested cloud services: AWS S3  
+7) Watermarking System The platform should support:  
+• Automatic watermarking during download  
+• Dynamic watermark based on:  
+• Club name  
+• Event name  
+• User role  
+Bonus Features  
+Participants may implement additional innovative features such as:  
+• Infinite scrolling gallery  
+• QR-based album sharing  
+• Story/highlight feature  
+• Collaborative albums  
+• AI-generated captions  
+• Analytics dashboard  
+• Progressive Web App (PWA)  
+• Offline caching  
+• Image moderation system  
+• Duplicate image detection  
+Technical Expectations  
+Participants are expected to build a scalable and production-ready solution.  
+Expected Deliverables  
+Teams should submit:  
+Mandatory  
+• GitHub repository  
+• Working deployed project/demo  
+• Proper documentation/README  
+• Database schema  
+• Architecture diagram  
+• Presentation/PPT  
+• Demo Video  
+Optional  
+• API documentation  
+• CI/CD pipeline  
+• Docker setup  
+Evaluation & Marking Criteria  
+Criteria  
+UI/UX and Design  
+Weightage  
+15%  
+Backend Architecture & APIs  
+15%  
+Authentication & Access Control  
+10%  
+Cloud Integration  
+15%  
+Weightage  
+Criteria  
+Media Management Features  
+15%  
+AI/ML Features  
+Real-time Notifications  
+15%  
+5%  
+Code Quality & Scalability  
+Innovation & Bonus Features  
+5%  
+5%  
+Judging Focus Areas  
+Judges will primarily evaluate:  
+• Problem understanding  
+• Scalability of architecture  
+• Real-world usability  
+• User experience  
+• AI/ML integration quality  
+• Cloud usage efficiency  
+• Feature completeness  
+• Creativity and innovation  

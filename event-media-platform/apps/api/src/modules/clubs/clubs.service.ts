@@ -100,7 +100,12 @@ export async function addClubMember(
   actorId: string,
   actorRole: UserRole,
 ) {
-  await assertClubAdmin(clubId, actorId, actorRole);
+  // Allow a user to self-join a club as a regular MEMBER. Adding *other*
+  // users or assigning the ADMIN role still requires club-admin rights.
+  const isSelfJoin = targetUserId === actorId && role === ClubRole.MEMBER;
+  if (!isSelfJoin) {
+    await assertClubAdmin(clubId, actorId, actorRole);
+  }
   return prisma.clubMembership.upsert({
     where: { clubId_userId: { clubId, userId: targetUserId } },
     create: { clubId, userId: targetUserId, role },

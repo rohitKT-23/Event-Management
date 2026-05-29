@@ -80,3 +80,15 @@ export async function addAlbumCollaborator(
     update: {},
   });
 }
+
+export async function removeAlbumCollaborator(
+  albumId: string,
+  collaboratorUserId: string,
+  actorId: string,
+  actorRole: UserRole,
+) {
+  await assertAlbumManager(albumId, actorId, actorRole);
+  await prisma.albumCollaborator.delete({
+    where: { albumId_userId: { albumId, userId: collaboratorUserId } },
+  });
+}

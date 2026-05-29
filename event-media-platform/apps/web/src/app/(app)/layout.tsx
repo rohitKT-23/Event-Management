@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { Navbar } from '@/components/navbar';
+import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { Loader2 } from 'lucide-react';
 
 export default function AuthenticatedAppLayout({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export default function AuthenticatedAppLayout({ children }: { children: React.R
     <div className="min-h-screen">
       <Navbar />
       <main className="container py-8">{children}</main>
+      <KeyboardShortcuts />
     </div>
   );
 }

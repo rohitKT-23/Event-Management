@@ -27,6 +27,7 @@ import searchRoutes from './modules/search/search.routes.js';
 import aiRoutes from './modules/ai/ai.routes.js';
 import analyticsRoutes from './modules/analytics/analytics.routes.js';
 import adminRoutes from './modules/admin/admin.routes.js';
+import storiesRoutes from './modules/stories/stories.routes.js';
 
 import { openApiSpec } from './lib/openapi.js';
 
@@ -67,6 +68,7 @@ export function createApp(): Express {
   app.use('/api/v1/ai', aiRoutes);
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/admin', adminRoutes);
+  app.use('/api/v1/stories', storiesRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

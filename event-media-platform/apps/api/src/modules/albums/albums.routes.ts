@@ -10,6 +10,7 @@ import {
   deleteAlbum,
   getAlbum,
   listAlbumMedia,
+  removeAlbumCollaborator,
   updateAlbum,
 } from './albums.service.js';
 
@@ -80,6 +81,16 @@ router.post(
       req.user!.role,
     );
     res.status(201).json({ collaborator: collab });
+  }),
+);
+
+router.delete(
+  '/:id/collaborators/:userId',
+  requireAuth,
+  validate(z.object({ id: z.string().min(20), userId: z.string().min(20) }), 'params'),
+  asyncHandler(async (req, res) => {
+    await removeAlbumCollaborator(req.params.id!, req.params.userId!, req.user!.id, req.user!.role);
+    res.status(204).end();
   }),
 );
 

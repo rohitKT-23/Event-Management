@@ -15,12 +15,17 @@ import {
   Camera,
   Loader2,
   ArrowLeft,
+  Pencil,
+  Sparkles,
+  Check,
 } from 'lucide-react';
 import { api, extractApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatNumber, formatRelativeTime } from '@/lib/utils';
+import { isPhotographer } from '@/lib/permissions';
 
 type MediaDetail = {
   id: string;
@@ -69,6 +74,8 @@ export default function MediaDetailPage() {
   const [likeCount, setLikeCount] = React.useState(0);
   const [comment, setComment] = React.useState('');
   const [downloading, setDownloading] = React.useState(false);
+  const [editingCaption, setEditingCaption] = React.useState(false);
+  const [captionDraft, setCaptionDraft] = React.useState('');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['media', id],
@@ -76,8 +83,29 @@ export default function MediaDetailPage() {
   });
 
   React.useEffect(() => {
-    if (data) setLikeCount(data._count.likes);
+    if (data) {
+      setLikeCount(data._count.likes);
+      setCaptionDraft(data.aiCaption ?? '');
+    }
   }, [data]);
+
+  const canEdit = !!me && (data?.uploader?.id === me.id || me.role === 'ADMIN');
+
+  const saveCaption = useMutation({
+    mutationFn: async () => api.patch(`/media/${id}`, { aiCaption: captionDraft }),
+    onSuccess: () => {
+      toast.success('Caption updated');
+      setEditingCaption(false);
+      queryClient.invalidateQueries({ queryKey: ['media', id] });
+    },
+    onError: (err) => toast.error(extractApiError(err).message),
+  });
+
+  const regenerate = useMutation({
+    mutationFn: async () => api.post(`/ai/regenerate-caption/${id}`),
+    onSuccess: () => toast.message('AI caption regeneration queued — refresh shortly.'),
+    onError: (err) => toast.error(extractApiError(err).message),
+  });
 
   // Determine if the current user already liked this media.
   useQuery({
@@ -250,7 +278,36 @@ export default function MediaDetailPage() {
             </Button>
           </div>
 
-          {data.aiCaption && <p className="text-sm">{data.aiCaption}</p>}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium uppercase text-muted-foreground">Caption</span>
+              {canEdit && !editingCaption && (
+                <button onClick={() => setEditingCaption(true)} aria-label="Edit caption" className="text-muted-foreground hover:text-foreground">
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {editingCaption ? (
+              <div className="space-y-2">
+                <Textarea value={captionDraft} onChange={(e) => setCaptionDraft(e.target.value)} rows={3} />
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => saveCaption.mutate()} disabled={saveCaption.isPending}>
+                    <Check className="mr-1 h-4 w-4" /> Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEditingCaption(false); setCaptionDraft(data.aiCaption ?? ''); }}>
+                    Cancel
+                  </Button>
+                  {isPhotographer(me) && (
+                    <Button size="sm" variant="outline" onClick={() => regenerate.mutate()} disabled={regenerate.isPending}>
+                      <Sparkles className="mr-1 h-4 w-4" /> Regenerate with AI
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{data.aiCaption || 'No caption.'}</p>
+            )}
+          </div>
 
           {data.aiTags.length > 0 && (
             <div className="flex flex-wrap gap-2">

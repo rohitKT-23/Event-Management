@@ -4,10 +4,22 @@
  *
  *   $ npm run prisma:seed
  */
-import { PrismaClient, UserRole, EventCategory, ClubRole } from '@prisma/client';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+import { PrismaClient, UserRole, EventCategory, ClubRole } from '../src/generated/prisma/client.js';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const rootEnv = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env');
+dotenv.config({ path: rootEnv });
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) throw new Error('DATABASE_URL is not set');
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+});
 
 async function main() {
   const password = await bcrypt.hash('Admin@1234', 12);
