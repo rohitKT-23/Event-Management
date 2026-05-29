@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
@@ -10,13 +10,15 @@ import { Loader2 } from 'lucide-react';
 
 export default function AuthenticatedAppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const setSession = useAuthStore((s) => s.setSession);
-  const storedUser = useAuthStore((s) => s.user);
+  const clear = useAuthStore((s) => s.clear);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isFetched } = useQuery({
     queryKey: ['me'],
     queryFn: async () => (await api.get('/auth/me')).data.user,
     staleTime: 60_000,
+    retry: false,
   });
 
   React.useEffect(() => {
@@ -24,10 +26,14 @@ export default function AuthenticatedAppLayout({ children }: { children: React.R
   }, [data, setSession]);
 
   React.useEffect(() => {
-    if (!isLoading && isError && !storedUser) router.replace('/login');
-  }, [isError, isLoading, router, storedUser]);
+    if (isFetched && (isError || !data)) {
+      clear();
+      const next = encodeURIComponent(pathname);
+      router.replace(`/login?next=${next}`);
+    }
+  }, [clear, data, isError, isFetched, pathname, router]);
 
-  if (isLoading && !storedUser) {
+  if (!isFetched || isLoading || !data) {
     return (
       <div className="grid min-h-screen place-items-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

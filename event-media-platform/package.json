@@ -8,7 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web,worker -c blue,green,yellow \"npm:dev -w @emp/api\" \"npm:dev -w @emp/web\" \"npm:dev:worker -w @emp/api\"",
+    "postinstall": "npm run build -w @emp/shared",
+    "dev": "npm run build -w @emp/shared && concurrently -n api,web,worker,shared -c blue,green,yellow,magenta \"npm:dev -w @emp/api\" \"npm:dev -w @emp/web\" \"npm:dev:worker -w @emp/api\" \"npm:dev -w @emp/shared\"",
     "dev:api": "npm run dev -w @emp/api",
     "dev:web": "npm run dev -w @emp/web",
     "dev:worker": "npm run dev:worker -w @emp/api",

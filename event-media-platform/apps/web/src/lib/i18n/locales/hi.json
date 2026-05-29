@@ -1,0 +1,21 @@
+{
+  "nav": {
+    "feed": "फ़ीड",
+    "events": "इवेंट",
+    "myPhotos": "मेरी तस्वीरें",
+    "favourites": "पसंदीदा",
+    "admin": "एडमिन",
+    "upload": "अपलोड",
+    "search": "खोज",
+    "notifications": "सूचनाएँ",
+    "logout": "लॉग आउट"
+  },
+  "common": {
+    "loading": "लोड हो रहा है…",
+    "language": "भाषा",
+    "download": "डाउनलोड",
+    "share": "साझा करें",
+    "comments": "टिप्पणियाँ",
+    "favourite": "पसंदीदा"
+  }
+}

@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { updateUserRoleSchema } from '@emp/shared';
 import { prisma } from '../../lib/prisma.js';
+import { resolveManyMediaUrls } from '../../services/s3.js';
 
 const router = Router();
 
@@ -87,7 +88,7 @@ router.get(
       }),
       prisma.media.count({ where }),
     ]);
-    res.json({ data, total, page, limit, hasMore: page * limit < total });
+    res.json({ data: await resolveManyMediaUrls(data), total, page, limit, hasMore: page * limit < total });
   }),
 );
 

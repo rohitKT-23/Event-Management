@@ -6,8 +6,9 @@
 import { logger } from './lib/logger.js';
 import { startMediaProcessingWorker } from './workers/mediaProcessing.js';
 import { startWatermarkWorker } from './workers/watermark.js';
+import { startEmailWorker } from './workers/email.js';
 
-const workers = [startMediaProcessingWorker(), startWatermarkWorker()];
+const workers = [startMediaProcessingWorker(), startWatermarkWorker(), startEmailWorker()];
 
 logger.info({ count: workers.length }, 'workers started');
 

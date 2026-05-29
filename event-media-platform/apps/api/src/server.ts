@@ -1,3 +1,4 @@
+import './lib/json.js';
 import http from 'node:http';
 import { createApp } from './app.js';
 import { env } from './config/env.js';

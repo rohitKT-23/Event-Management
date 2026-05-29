@@ -4,10 +4,12 @@ import * as React from 'react';
 import { toast } from 'sonner';
 import { api, extractApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
+import { formatUserRole } from '@/lib/auth-routes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SelfieUpload } from '@/components/selfie-upload';
 
 export default function EditProfilePage() {
   const user = useAuthStore((s) => s.user);
@@ -47,6 +49,23 @@ export default function EditProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" value={user?.email ?? ''} readOnly disabled className="bg-muted" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="role">Role</Label>
+            <Input
+              id="role"
+              value={formatUserRole(user?.role)}
+              readOnly
+              disabled
+              className="bg-muted capitalize"
+            />
+            <p className="text-xs text-muted-foreground">
+              Your role controls what you can upload and manage. Contact an admin to change it.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
             <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
           </div>
@@ -71,10 +90,7 @@ export default function EditProfilePage() {
           <CardTitle className="text-lg">Face-match selfie</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Upload a clear front-facing selfie. We'll find every event photo you appear in.
-            (Hook this up to <code className="rounded bg-muted px-1">/users/me/selfie</code> in the next iteration.)
-          </p>
+          <SelfieUpload />
         </CardContent>
       </Card>
     </div>

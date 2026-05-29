@@ -63,6 +63,14 @@ export async function presignedPutUrl(
   return getSignedUrl(s3, cmd, { expiresIn: expiresInSeconds });
 }
 
+/** Download an object's bytes into memory. */
+export async function getObjectBuffer(bucket: string, key: string): Promise<Buffer> {
+  const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const body = res.Body as unknown as { transformToByteArray: () => Promise<Uint8Array> };
+  const bytes = await body.transformToByteArray();
+  return Buffer.from(bytes);
+}
+
 export async function presignedGetUrl(
   bucket: string,
   key: string,
@@ -79,4 +87,56 @@ export async function presignedGetUrl(
 export function cdnUrlFor(key: string): string | null {
   if (!env.CLOUDFRONT_DOMAIN) return null;
   return `https://${env.CLOUDFRONT_DOMAIN}/${key}`;
+}
+
+type MediaWithUrls = {
+  s3Key?: string;
+  uploadStatus?: string;
+  thumbnailUrl?: string | null;
+  cdnUrl?: string | null;
+  watermarkUrl?: string | null;
+};
+
+function isHttpUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://');
+}
+
+function bucketForObjectKey(key: string): string {
+  if (key.startsWith('watermarked/')) return BUCKETS.WATERMARKED;
+  if (key.startsWith('processed/') || key.startsWith('thumbnails/')) return BUCKETS.PROCESSED;
+  if (key.startsWith('media/')) return BUCKETS.ORIGINAL;
+  return BUCKETS.PROCESSED;
+}
+
+function derivedThumbKey(s3Key: string): string {
+  return `thumbnails/${s3Key.replace(/^media\//, '')}.jpg`;
+}
+
+/** Turn stored S3 keys into browser-loadable URLs (presigned when CloudFront is off). */
+export async function resolveMediaUrls<T extends MediaWithUrls>(media: T): Promise<T> {
+  const out = { ...media };
+
+  if (out.thumbnailUrl && !isHttpUrl(out.thumbnailUrl)) {
+    out.thumbnailUrl = await presignedGetUrl(BUCKETS.PROCESSED, out.thumbnailUrl);
+  } else if (!out.thumbnailUrl && out.s3Key && out.uploadStatus === 'DONE') {
+    try {
+      out.thumbnailUrl = await presignedGetUrl(BUCKETS.PROCESSED, derivedThumbKey(out.s3Key));
+    } catch {
+      // thumbnail object missing — leave null
+    }
+  }
+
+  if (out.cdnUrl && !isHttpUrl(out.cdnUrl)) {
+    out.cdnUrl = await presignedGetUrl(bucketForObjectKey(out.cdnUrl), out.cdnUrl);
+  }
+
+  if (out.watermarkUrl && !isHttpUrl(out.watermarkUrl)) {
+    out.watermarkUrl = await presignedGetUrl(BUCKETS.WATERMARKED, out.watermarkUrl);
+  }
+
+  return out;
+}
+
+export async function resolveManyMediaUrls<T extends MediaWithUrls>(items: T[]): Promise<T[]> {
+  return Promise.all(items.map((item) => resolveMediaUrls(item)));
 }

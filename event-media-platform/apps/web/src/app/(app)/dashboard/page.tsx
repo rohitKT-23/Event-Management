@@ -1,7 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import * as React from 'react';
+import { Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Calendar, Camera, Heart, Sparkles, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +14,25 @@ import { useAuthStore } from '@/stores/auth';
 import { formatRelativeTime } from '@/lib/utils';
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardPageContent />
+    </Suspense>
+  );
+}
+
+function DashboardPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((s) => s.user);
+
+  React.useEffect(() => {
+    if (searchParams.get('oauth') === 'google') {
+      toast.success('Signed in with Google');
+      router.replace('/dashboard');
+    }
+  }, [router, searchParams]);
+
   const events = useQuery({
     queryKey: ['events', 'recent'],
     queryFn: async () => (await api.get('/events', { params: { limit: 6 } })).data,
@@ -97,6 +119,10 @@ export default function DashboardPage() {
                   {m.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={m.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                  ) : m.uploadStatus === 'DONE' ? (
+                    <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                      ready
+                    </div>
                   ) : (
                     <div className="grid h-full place-items-center text-xs text-muted-foreground">
                       processing…

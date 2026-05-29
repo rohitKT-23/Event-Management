@@ -6,10 +6,13 @@ import { validate } from '../../middleware/validate.js';
 import { updateUserSchema, paginationSchema } from '@emp/shared';
 import {
   deleteMyAccount,
+  finalizeSelfie,
   getPublicUser,
+  getSelfieUploadUrl,
   listMyFaceMatchedPhotos,
   listMyFavourites,
   listMyNotifications,
+  listMySelfies,
   listMyUploads,
   markAllNotificationsRead,
   updateMyProfile,
@@ -67,6 +70,35 @@ router.get(
     const { page, limit } = req.query as unknown as { page: number; limit: number };
     const result = await listMyFaceMatchedPhotos(req.user!.id, page, limit);
     res.json({ ...result, page, limit, hasMore: page * limit < result.total });
+  }),
+);
+
+router.post(
+  '/me/selfie/presigned-url',
+  requireAuth,
+  validate(z.object({ contentType: z.string().regex(/^image\//) })),
+  asyncHandler(async (req, res) => {
+    const result = await getSelfieUploadUrl(req.user!.id, req.body.contentType);
+    res.json(result);
+  }),
+);
+
+router.post(
+  '/me/selfie',
+  requireAuth,
+  validate(z.object({ s3Key: z.string().min(1) })),
+  asyncHandler(async (req, res) => {
+    const result = await finalizeSelfie(req.user!.id, req.body.s3Key);
+    res.status(201).json(result);
+  }),
+);
+
+router.get(
+  '/me/selfies',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const selfies = await listMySelfies(req.user!.id);
+    res.json({ data: selfies });
   }),
 );
 

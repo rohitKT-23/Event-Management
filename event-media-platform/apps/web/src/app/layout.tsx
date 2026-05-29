@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import { PwaRegister } from '@/components/pwa-register';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 const display = Plus_Jakarta_Sans({
@@ -16,6 +17,9 @@ export const metadata: Metadata = {
   description:
     'Discover, share, and relive event memories. AI-tagged galleries, facial recognition, and real-time collaboration for clubs and photographers.',
   applicationName: 'EMP',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'EMP' },
+  icons: { icon: '/icon.svg', apple: '/icon.svg' },
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'),
   openGraph: {
     title: 'Event & Media Platform',
@@ -36,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${display.variable} font-sans min-h-screen bg-background`}>
         <Providers>{children}</Providers>
+        <PwaRegister />
       </body>
     </html>
   );

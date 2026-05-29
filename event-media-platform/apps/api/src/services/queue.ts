@@ -51,11 +51,13 @@ export type WatermarkJob = {
   userId: string;
 };
 
+export type EmailTemplateId = 'password-reset' | 'verify-email' | 'weekly-digest';
+
 export type EmailJob = {
   to: string;
-  subject: string;
-  templateId: string;
-  vars: Record<string, unknown>;
+  templateId: EmailTemplateId;
+  vars: Record<string, string>;
+  idempotencyKey?: string;
 };
 
 export async function enqueueMediaProcessing(payload: MediaProcessingJob, jobId?: string) {
@@ -66,6 +68,6 @@ export async function enqueueWatermark(payload: WatermarkJob) {
   return watermarkQueue.add('apply', payload);
 }
 
-export async function enqueueEmail(payload: EmailJob) {
-  return emailQueue.add('send', payload);
+export async function enqueueEmail(payload: EmailJob, options?: { jobId?: string }) {
+  return emailQueue.add('send', payload, options?.jobId ? { jobId: options.jobId } : undefined);
 }

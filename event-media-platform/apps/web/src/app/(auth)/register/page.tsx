@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { registerSchema, type RegisterInput, UserRole } from '@emp/shared';
 import { api, extractApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
+import { AuthDivider, GoogleSignInButton } from '@/components/google-sign-in-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +16,7 @@ import { Loader2 } from 'lucide-react';
 
 const roles: { value: typeof UserRole.VIEWER | typeof UserRole.CLUB_MEMBER | typeof UserRole.PHOTOGRAPHER; label: string; hint: string }[] = [
   { value: UserRole.VIEWER, label: 'Viewer', hint: 'Browse public events' },
-  { value: UserRole.CLUB_MEMBER, label: 'Club member', hint: 'Belong to a club' },
+  { value: UserRole.CLUB_MEMBER, label: 'Club Member', hint: 'Belong to a club' },
   { value: UserRole.PHOTOGRAPHER, label: 'Photographer', hint: 'Upload & manage media' },
 ];
 
@@ -52,7 +53,12 @@ export default function RegisterPage() {
         Start uploading, tagging, and sharing in minutes.
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+      <div className="mt-6">
+        <GoogleSignInButton label="Sign up with Google" />
+      </div>
+      <AuthDivider />
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="username">Username</Label>
           <Input id="username" autoComplete="username" placeholder="e.g. lens.master" {...register('username')} />

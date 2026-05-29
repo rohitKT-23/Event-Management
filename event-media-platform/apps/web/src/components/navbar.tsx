@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bell, LogOut, Moon, Sun, Upload, User, Search } from 'lucide-react';
+import { Bell, LogOut, Moon, Sun, Upload, User, Search, Languages } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,10 @@ import { Button } from '@/components/ui/button';
 export function Navbar() {
   const { user, clear } = useAuthStore();
   const { theme, setTheme } = useTheme();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
+
+  const toggleLanguage = () => i18n.changeLanguage(i18n.language?.startsWith('hi') ? 'en' : 'hi');
 
   const onLogout = async () => {
     await api.post('/auth/logout').catch(() => undefined);
@@ -31,17 +35,22 @@ export function Navbar() {
 
         <nav className="ml-4 hidden gap-1 md:flex">
           <Button asChild variant="ghost" size="sm">
-            <Link href="/dashboard">Feed</Link>
+            <Link href="/dashboard">{t('nav.feed')}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/events">Events</Link>
+            <Link href="/events">{t('nav.events')}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/my-photos">My photos</Link>
+            <Link href="/my-photos">{t('nav.myPhotos')}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/favourites">Favourites</Link>
+            <Link href="/favourites">{t('nav.favourites')}</Link>
           </Button>
+          {user?.role === 'ADMIN' && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin">{t('nav.admin')}</Link>
+            </Button>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
@@ -50,6 +59,15 @@ export function Navbar() {
           </Button>
           <Button asChild variant="ghost" size="icon" aria-label="Notifications">
             <Link href="/notifications"><Bell className="h-4 w-4" /></Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('common.language')}
+            title={t('common.language')}
+            onClick={toggleLanguage}
+          >
+            <Languages className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"

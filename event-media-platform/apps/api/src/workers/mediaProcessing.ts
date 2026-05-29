@@ -14,9 +14,14 @@ import { redisQueue } from '../lib/redis.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { QUEUE_NAMES, type MediaProcessingJob } from '../services/queue.js';
-import { BUCKETS, cdnUrlFor, s3 } from '../services/s3.js';
+import { BUCKETS, s3 } from '../services/s3.js';
 import { emitToUser } from '../services/socket.js';
 import { env } from '../config/env.js';
+import { extractExif } from '../lib/exif.js';
+import { convertHeicToJpeg, isHeic } from '../lib/heic.js';
+import { scanBuffer } from '../services/security/virusScan.js';
+import { generateVideoPoster } from '../services/video/transcode.js';
+import { matchFacesToUsers } from '../services/faces.js';
 
 async function downloadFromS3(bucket: string, key: string): Promise<Buffer> {
   const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
@@ -67,23 +72,83 @@ async function processJob(job: Job<MediaProcessingJob>) {
   try {
     await prisma.media.update({ where: { id: mediaId }, data: { uploadStatus: 'PROCESSING' } });
 
-    const original = await downloadFromS3(bucket, key);
-    const meta = await sharp(original).metadata();
+    const mediaRow = await prisma.media.findUnique({
+      where: { id: mediaId },
+      select: { type: true, mimeType: true },
+    });
+    const isVideo = mediaRow?.type === 'VIDEO';
 
-    // Step 2/3: compression + thumbnail (photos only)
+    let original = await downloadFromS3(bucket, key);
+
+    // Step 0: virus scan (no-op unless VIRUS_SCAN_ENABLED + ClamAV configured).
+    const scan = await scanBuffer(original);
+    if (scan.scanned && !scan.clean) {
+      logger.warn({ mediaId, signature: scan.signature }, 'media flagged by virus scan — rejecting');
+      await prisma.media.update({
+        where: { id: mediaId },
+        data: {
+          uploadStatus: 'FAILED',
+          moderationStatus: 'REJECTED',
+          moderationReason: `Virus scan: ${scan.signature ?? 'infected'}`,
+        },
+      });
+      emitToUser(uploaderId, 'upload:complete', { mediaId, status: 'FAILED', reason: 'virus' });
+      return;
+    }
+
+    // Step 1: HEIC → JPEG conversion (iPhone uploads) before the image pipeline.
+    if (!isVideo && isHeic(mediaRow?.mimeType ?? '', key)) {
+      const converted = await convertHeicToJpeg(original);
+      if (converted) {
+        original = converted;
+        logger.info({ mediaId }, 'converted HEIC to JPEG');
+      }
+    }
+
+    // EXIF extraction (camera, lens, GPS) from the original image.
+    let exifData: Record<string, unknown> | null = null;
+    let gpsLatitude: number | null = null;
+    let gpsLongitude: number | null = null;
+
+    // Step 2/3: compression + thumbnail.
     let processedBuf: Buffer | null = null;
     let thumbBuf: Buffer | null = null;
-    if (meta.format && meta.format !== 'svg') {
-      processedBuf = await sharp(original)
-        .rotate()
-        .resize({ width: 2048, withoutEnlargement: true })
-        .jpeg({ quality: 85, mozjpeg: true })
-        .toBuffer();
-      thumbBuf = await sharp(original)
-        .rotate()
-        .resize(400, 400, { fit: 'cover' })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+    let width: number | null = null;
+    let height: number | null = null;
+    let durationSeconds: number | null = null;
+
+    if (isVideo) {
+      // Step V: generate a poster thumbnail via ffmpeg (graceful if unavailable).
+      const { posterBuffer, durationSeconds: dur } = await generateVideoPoster(original);
+      durationSeconds = dur;
+      if (posterBuffer) {
+        thumbBuf = await sharp(posterBuffer)
+          .resize(400, 400, { fit: 'cover' })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+      }
+    } else {
+      const meta = await sharp(original).metadata();
+      width = meta.width ?? null;
+      height = meta.height ?? null;
+
+      const exif = await extractExif(meta.exif);
+      exifData = exif.exif;
+      gpsLatitude = exif.gpsLatitude;
+      gpsLongitude = exif.gpsLongitude;
+
+      if (meta.format && meta.format !== 'svg') {
+        processedBuf = await sharp(original)
+          .rotate()
+          .resize({ width: 2048, withoutEnlargement: true })
+          .jpeg({ quality: 85, mozjpeg: true })
+          .toBuffer();
+        thumbBuf = await sharp(original)
+          .rotate()
+          .resize(400, 400, { fit: 'cover' })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+      }
     }
 
     const processedKey = `processed/${key.replace(/^media\//, '')}.jpg`;
@@ -96,13 +161,14 @@ async function processJob(job: Job<MediaProcessingJob>) {
     const phash = processedBuf ? await computePerceptualHash(processedBuf) : null;
     const duplicates = phash ? await findDuplicates(mediaId, phash) : [];
 
-    // Step 5/6/7/8/9: AI tagging, moderation, caption, faces — stubbed unless creds.
+    // Step 5/6/7/8/9: AI tagging, moderation, caption, faces — graceful unless creds.
     const aiTags: string[] = [];
     let aiCaption: string | null = null;
     let moderationStatus: 'APPROVED' | 'PENDING' | 'REJECTED' = 'APPROVED';
     let moderationReason: string | null = null;
+    let indexedFaceIds: string[] = [];
 
-    if (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY) {
+    if (!isVideo && env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY) {
       try {
         const { RekognitionClient, DetectLabelsCommand, DetectModerationLabelsCommand, IndexFacesCommand } =
           await import('@aws-sdk/client-rekognition');
@@ -130,6 +196,7 @@ async function processJob(job: Job<MediaProcessingJob>) {
           ExternalImageId: mediaId,
         }));
         if (faces.FaceRecords?.length) {
+          indexedFaceIds = faces.FaceRecords.map((f) => f.Face?.FaceId).filter(Boolean) as string[];
           await prisma.faceIndex.createMany({
             data: faces.FaceRecords.map((f) => ({
               mediaId,
@@ -143,8 +210,13 @@ async function processJob(job: Job<MediaProcessingJob>) {
       } catch (err) {
         logger.warn({ err, mediaId }, 'rekognition step failed (continuing)');
       }
-    } else {
+    } else if (!isVideo) {
       logger.debug('AWS creds missing — skipping Rekognition');
+    }
+
+    // Step 9: face-to-user matching → resolve faceIndex.userId + notify matches.
+    if (indexedFaceIds.length) {
+      await matchFacesToUsers({ mediaId, faceIds: indexedFaceIds, uploaderId });
     }
 
     if (env.OPENAI_API_KEY && processedBuf) {
@@ -174,10 +246,14 @@ async function processJob(job: Job<MediaProcessingJob>) {
     const updated = await prisma.media.update({
       where: { id: mediaId },
       data: {
-        cdnUrl: processedBuf ? cdnUrlFor(processedKey) : cdnUrlFor(key),
-        thumbnailUrl: thumbBuf ? cdnUrlFor(thumbKey) : null,
-        width: meta.width ?? null,
-        height: meta.height ?? null,
+        cdnUrl: processedBuf ? processedKey : key,
+        thumbnailUrl: thumbBuf ? thumbKey : null,
+        width,
+        height,
+        durationSeconds,
+        exif: (exifData as any) ?? undefined,
+        gpsLatitude,
+        gpsLongitude,
         phash,
         aiTags: { set: aiTags },
         aiCaption,

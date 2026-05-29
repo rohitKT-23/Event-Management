@@ -4,10 +4,13 @@ import { ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import {
   BUCKETS,
   buildMediaKey,
-  cdnUrlFor,
+  getObjectBuffer,
   presignedGetUrl,
   presignedPutUrl,
+  resolveMediaUrls,
+  resolveManyMediaUrls,
 } from '../../services/s3.js';
+import { logger } from '../../lib/logger.js';
 import { enqueueMediaProcessing, enqueueWatermark } from '../../services/queue.js';
 import { env } from '../../config/env.js';
 
@@ -73,7 +76,6 @@ export async function finalizeUpload(input: {
       fileSize: BigInt(input.size),
       type,
       uploadStatus: UploadStatus.PENDING,
-      cdnUrl: cdnUrlFor(input.s3Key),
     },
   });
 
@@ -109,7 +111,7 @@ export async function getMedia(id: string, viewerId?: string) {
   if (!media.isPublic && (!viewerId || viewerId !== media.uploaderId)) {
     throw new ForbiddenError('Media is private');
   }
-  return media;
+  return resolveMediaUrls(media);
 }
 
 export async function updateMedia(
@@ -138,13 +140,57 @@ export async function deleteMedia(id: string, userId: string, userRole: UserRole
 export async function getUploadStatus(jobId: string) {
   const media = await prisma.media.findFirst({ where: { uploadJobId: jobId } });
   if (!media) throw new NotFoundError('Job');
+  const resolved = await resolveMediaUrls(media);
   return {
     jobId,
-    mediaId: media.id,
-    uploadStatus: media.uploadStatus,
-    thumbnailUrl: media.thumbnailUrl,
-    cdnUrl: media.cdnUrl,
+    mediaId: resolved.id,
+    uploadStatus: resolved.uploadStatus,
+    thumbnailUrl: resolved.thumbnailUrl,
+    cdnUrl: resolved.cdnUrl,
   };
+}
+
+/**
+ * Collect downloadable bytes for a set of media into ZIP-ready entries.
+ * Honours visibility (public, or owned by the requester) and records the
+ * downloads. Prefers the processed object, falling back to the original.
+ */
+export async function buildMediaZip(mediaIds: string[], userId: string) {
+  const rows = await prisma.media.findMany({
+    where: {
+      id: { in: mediaIds },
+      OR: [{ isPublic: true }, { uploaderId: userId }],
+    },
+    select: { id: true, s3Key: true, cdnUrl: true, mimeType: true, type: true },
+  });
+
+  const entries: Array<{ name: string; buffer: Buffer }> = [];
+  const usedNames = new Set<string>();
+
+  for (const row of rows) {
+    const useProcessed = row.cdnUrl && !/^https?:\/\//.test(row.cdnUrl);
+    const bucket = useProcessed ? BUCKETS.PROCESSED : BUCKETS.ORIGINAL;
+    const key = useProcessed ? (row.cdnUrl as string) : row.s3Key;
+    try {
+      const buffer = await getObjectBuffer(bucket, key);
+      const ext = useProcessed ? 'jpg' : (row.s3Key.split('.').pop() || 'bin');
+      let name = `${row.id}.${ext}`;
+      while (usedNames.has(name)) name = `${row.id}-${entries.length}.${ext}`;
+      usedNames.add(name);
+      entries.push({ name, buffer });
+    } catch (err) {
+      logger.warn({ err, mediaId: row.id }, 'zip: failed to fetch object (skipping)');
+    }
+  }
+
+  if (entries.length) {
+    await prisma.download.createMany({
+      data: rows.slice(0, entries.length).map((r) => ({ userId, mediaId: r.id })),
+      skipDuplicates: true,
+    });
+  }
+
+  return entries;
 }
 
 export async function requestDownload(mediaId: string, userId: string) {

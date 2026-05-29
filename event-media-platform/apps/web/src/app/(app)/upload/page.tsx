@@ -52,6 +52,27 @@ export default function UploadPage() {
   const update = (id: string, patch: Partial<FileEntry>) =>
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
 
+  const pollProcessingStatus = async (entryId: string, jobId: string) => {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      try {
+        const { data } = await api.get(`/media/upload-status/${jobId}`);
+        if (data.uploadStatus === 'DONE') {
+          update(entryId, { status: 'done' });
+          toast.success('Processing complete');
+          return;
+        }
+        if (data.uploadStatus === 'FAILED') {
+          update(entryId, { status: 'failed', error: 'Server processing failed' });
+          return;
+        }
+      } catch {
+        // keep polling — job may not be visible yet
+      }
+    }
+    update(entryId, { status: 'failed', error: 'Processing timed out' });
+  };
+
   const remove = (id: string) =>
     setEntries((prev) => {
       const target = prev.find((e) => e.id === id);
@@ -86,8 +107,11 @@ export default function UploadPage() {
         ...(eventId && { eventId }),
       });
 
+      const jobId = finalized.media.uploadJobId ?? finalized.media.id;
       update(entry.id, { status: 'processing', mediaId: finalized.media.id, progress: 100 });
       toast.success(`${entry.file.name} uploaded — processing on the server.`);
+
+      void pollProcessingStatus(entry.id, jobId);
     } catch (err) {
       const msg = extractApiError(err).message;
       update(entry.id, { status: 'failed', error: msg });

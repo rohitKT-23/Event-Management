@@ -1,0 +1,21 @@
+{
+  "nav": {
+    "feed": "Feed",
+    "events": "Events",
+    "myPhotos": "My photos",
+    "favourites": "Favourites",
+    "admin": "Admin",
+    "upload": "Upload",
+    "search": "Search",
+    "notifications": "Notifications",
+    "logout": "Log out"
+  },
+  "common": {
+    "loading": "Loading…",
+    "language": "Language",
+    "download": "Download",
+    "share": "Share",
+    "comments": "Comments",
+    "favourite": "Favourite"
+  }
+}

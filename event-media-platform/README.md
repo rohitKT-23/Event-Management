@@ -158,6 +158,16 @@ Runs the API (`:4000`), web (`:3000`), and the worker concurrently with hot relo
    on hash mismatch as theft mitigation).
 4. `POST /auth/logout` revokes the active refresh token.
 
+**Google OAuth**
+
+1. Browser: `GET /api/v1/auth/google` (or click **Continue with Google** on login/register).
+2. User consents on Google; Google redirects to `GOOGLE_CALLBACK_URL`.
+3. API finds or creates the user (`googleId` / email link), sets the same JWT cookies, and
+   redirects to `{WEB_BASE_URL}/dashboard`.
+4. The app layout calls `GET /auth/me` (cookie auth) to hydrate the client session.
+
+Requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_CALLBACK_URL` in `.env`.
+
 ---
 
 ## Upload flow (presigned-URL pattern)
@@ -187,7 +197,8 @@ scaffolded with TODO markers and are next on the list.
       albums, collaborators, media, faces, selfies, social — likes/comments/shares/
       favourites/tags/downloads, notifications, analytics, RSVP)
 - [x] Auth: register, login, logout, refresh, me, forgot/reset password, JWT
-      access + refresh rotation, theft detection, RBAC middleware
+      access + refresh rotation, theft detection, RBAC middleware, **Google OAuth**
+- [x] Transactional email via **Resend** (verify, password reset, weekly digest queue)
 - [x] CRUD: users, clubs, club memberships, events, albums, collaborators, media
 - [x] Media: presigned PUT URLs, finalize, status polling, S3 service, daily
       upload quota tracked in Redis
@@ -199,26 +210,34 @@ scaffolded with TODO markers and are next on the list.
       service that persists + pushes
 - [x] Admin endpoints: list users, role change, moderation queue
 - [x] Analytics endpoints: overview, per-event, top media
+- [x] Selfie upload + face matching: `POST /users/me/selfie` (presigned →
+      Rekognition `index_faces` + `search_faces_by_image`), face-to-user
+      matching in the worker → "you were detected in a photo" notifications
+- [x] EXIF extraction in worker (Sharp `metadata().exif` → camera/lens/ISO +
+      decimal GPS), persisted to `media.exif` / `gpsLatitude` / `gpsLongitude`
+- [x] HEIC→JPEG conversion in worker (iPhone uploads, `heic-convert`)
+- [x] Video poster/duration hook (ffmpeg via `fluent-ffmpeg` + `ffmpeg-static`,
+      graceful when ffmpeg is unavailable)
+- [x] Virus-scan hook (ClamAV INSTREAM, pluggable + graceful no-op in dev)
+- [x] Bulk ZIP download (`POST /media/download-zip`, `archiver`) + multi-select UI
 - [x] Frontend: landing, login, register, dashboard, upload (drag-drop +
-      presigned + progress), events list + detail, my-photos, favourites,
-      notifications, profile edit, 404
+      presigned + progress), events list + detail, **media detail
+      (`/media/:id`: likes, comments, tags, EXIF/GPS, share, watermark download)**,
+      my-photos, favourites, notifications, profile edit + selfie, 404
+- [x] **Admin dashboard** (`/admin` overview + charts, `/admin/users` role
+      management, `/admin/media` moderation queue) with Recharts
+- [x] **PWA**: web manifest + service worker (app-shell + offline gallery image
+      caching) + offline fallback page
+- [x] **i18n**: i18next + react-i18next baseline (English + Hindi) with in-app
+      language switcher
 - [x] Docker compose stack, multi-stage Dockerfiles, GitHub Actions CI
 
-### Next up (clearly stubbed in code — search "TODO" or "stub")
-- [ ] Google OAuth (`/auth/google`) — schema + endpoints stubbed.
-- [ ] Email transactional (verify, reset, weekly digest) — `emailQueue`
-      created, SMTP env vars defined; handler stub awaits implementation.
-- [ ] Selfie upload endpoint (`POST /users/me/selfie`) — DB model + UI present;
-      Rekognition search_faces_by_image call to be added.
-- [ ] Media detail page (`/media/:id`) — backend exists; UI page to be added.
-- [ ] Admin dashboard (`/admin/*`) — backend exists; UI pages to be added.
-- [ ] PWA: `next-pwa` config + service worker + offline gallery caching.
-- [ ] EXIF extraction step in worker (Sharp `metadata().exif` → parse + persist).
-- [ ] Video transcoding pipeline (ffmpeg) — only image processing today.
-- [ ] HEIC→JPEG conversion in worker.
-- [ ] Bulk ZIP download (archiver).
-- [ ] i18next setup.
-- [ ] Virus scanning hook.
+### Next up
+- [ ] Photo map view (Leaflet/Mapbox) using the now-persisted EXIF GPS.
+- [ ] Full H.264 video transcode + adaptive renditions (poster + duration done).
+- [ ] Expand i18n coverage to every page (infra + nav done today).
+- [ ] Weekly-digest cron trigger (queue + template already wired).
+- [ ] Generate PNG app icons (a vector `icon.svg` ships today).
 
 ---
 
@@ -238,6 +257,78 @@ scaffolded with TODO markers and are next on the list.
 
 ---
 
+## Email (Resend)
+
+Transactional email runs through the **Resend** SDK (`resend` npm package) and a
+BullMQ `email` worker.
+
+| Trigger | Template | When |
+|---------|----------|------|
+| Register | `verify-email` | Queued after account creation |
+| `POST /auth/forgot-password` | `password-reset` | 1-hour reset link |
+| Weekly digest helper | `weekly-digest` | Call `enqueueWeeklyDigestForUser(userId)` (cron TBD) |
+
+Configure in `.env`:
+
+```env
+RESEND_API_KEY=re_xxxxxxxx
+EMAIL_FROM=EMP <notifications@yourdomain.com>
+```
+
+- Get an API key at [resend.com/api-keys](https://resend.com/api-keys).
+- Verify your domain at [resend.com/domains](https://resend.com/domains) and use
+  that domain in `EMAIL_FROM` for production.
+- For local testing only, you can use `EMP <onboarding@resend.dev>` and send to
+  Resend test addresses like `delivered@resend.dev`.
+
+If `RESEND_API_KEY` is missing, jobs are still queued but the worker logs a skip
+(no crash) so the rest of the app keeps working.
+
+---
+
+## Media pipeline add-ons
+
+All of the following are **graceful** — they enhance processing when their
+dependency/credentials are present and silently no-op otherwise.
+
+| Feature | How to enable | Falls back to |
+|---|---|---|
+| Face → user matching | AWS Rekognition creds + `REKOGNITION_COLLECTION_ID` | faces indexed, no user link |
+| EXIF + GPS | always on (`exif-reader`) | empty EXIF for stripped images |
+| HEIC → JPEG | always on (`heic-convert`) | original kept if convert fails |
+| Video poster/duration | `npm i fluent-ffmpeg ffmpeg-static -w @emp/api` (or system ffmpeg) | no poster generated |
+| Virus scanning | `VIRUS_SCAN_ENABLED=true` + `CLAMAV_HOST`/`CLAMAV_PORT` | every file treated as clean |
+| Bulk ZIP download | always on (`archiver`) | — |
+
+```env
+# Optional virus scanning (ClamAV daemon, INSTREAM protocol)
+VIRUS_SCAN_ENABLED=false
+CLAMAV_HOST=127.0.0.1
+CLAMAV_PORT=3310
+```
+
+## Selfie face match
+
+1. `POST /users/me/selfie/presigned-url` → presigned PUT into the private
+   selfies bucket.
+2. Browser uploads the selfie directly to S3.
+3. `POST /users/me/selfie` with the returned `s3Key` → indexes the face,
+   searches the collection, links every matching media face to the user, and
+   surfaces them under **My photos**.
+
+Wired into `/profile/edit` (selfie card). Without Rekognition the selfie is
+stored and matching activates automatically once newer photos are processed.
+
+## PWA & i18n
+
+- **PWA**: `public/manifest.json` + `public/sw.js` (registered in production via
+  `PwaRegister`). The service worker precaches the app shell and runtime-caches
+  thumbnails/processed images for an offline gallery, with an `/offline` fallback.
+- **i18n**: `src/lib/i18n` initialises i18next (English + Hindi) with browser
+  language detection; toggle languages from the navbar globe button.
+
+---
+
 ## Environment
 
 Every secret + setting lives in `.env`. See `.env.example` for the full list.
@@ -250,7 +341,7 @@ The minimum to boot in dev:
 - `JWT_ACCESS_SECRET` (≥ 16 chars)
 - `JWT_REFRESH_SECRET` (≥ 16 chars)
 
-AWS / OpenAI keys are **optional**: if missing, those steps in the worker are
+AWS / OpenAI / Resend keys are **optional**: if missing, those steps in the worker are
 skipped with a debug log so you can develop locally without cloud accounts.
 
 ---

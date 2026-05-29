@@ -15,6 +15,12 @@ export type RefreshTokenPayload = {
   tid: string; // token id stored in DB (rotation tracking)
 };
 
+export type EmailVerifyPayload = {
+  sub: string;
+  email: string;
+  purpose: 'email-verify';
+};
+
 const accessOptions: SignOptions = {
   expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions['expiresIn'],
   issuer: env.APP_NAME,
@@ -39,6 +45,22 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return jwt.verify(token, env.JWT_REFRESH_SECRET) as RefreshTokenPayload;
+}
+
+export function signEmailVerificationToken(userId: string, email: string): string {
+  const payload: EmailVerifyPayload = { sub: userId, email, purpose: 'email-verify' };
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: '24h',
+    issuer: env.APP_NAME,
+  });
+}
+
+export function verifyEmailVerificationToken(token: string): EmailVerifyPayload {
+  const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as EmailVerifyPayload;
+  if (payload.purpose !== 'email-verify') {
+    throw new Error('Invalid token purpose');
+  }
+  return payload;
 }
 
 // Hash refresh tokens before storing them in DB — never store raw.

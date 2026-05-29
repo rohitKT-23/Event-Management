@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../../lib/http.js';
+import { logger } from '../../lib/logger.js';
 import { optionalAuth, requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -9,6 +10,7 @@ import {
   updateMediaSchema,
 } from '@emp/shared';
 import {
+  buildMediaZip,
   deleteMedia,
   finalizeUpload,
   generatePresignedUpload,
@@ -100,6 +102,36 @@ router.get(
   asyncHandler(async (req, res) => {
     const result = await requestDownload(req.params.id!, req.user!.id);
     res.json(result);
+  }),
+);
+
+// Bulk ZIP download — streams selected media into a single archive.
+router.post(
+  '/download-zip',
+  requireAuth,
+  validate(z.object({ mediaIds: z.array(z.string().min(20)).min(1).max(200) })),
+  asyncHandler(async (req, res) => {
+    const { default: archiver } = await import('archiver');
+    const entries = await buildMediaZip(req.body.mediaIds, req.user!.id);
+    if (!entries.length) {
+      res.status(404).json({ error: { message: 'No downloadable media found' } });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="emp-media-${Date.now()}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', (err) => {
+      logger.error({ err }, 'zip stream error');
+      res.destroy(err);
+    });
+    archive.pipe(res);
+
+    for (const entry of entries) {
+      archive.append(entry.buffer, { name: entry.name });
+    }
+    await archive.finalize();
   }),
 );
 

@@ -6,7 +6,7 @@ import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { moderationDecisionSchema } from '@emp/shared';
 import { prisma } from '../../lib/prisma.js';
-import { BUCKETS } from '../../services/s3.js';
+import { BUCKETS, resolveManyMediaUrls } from '../../services/s3.js';
 import { enqueueMediaProcessing } from '../../services/queue.js';
 import { NotFoundError } from '../../lib/errors.js';
 
@@ -59,7 +59,7 @@ router.get(
       take: 100,
       include: { uploader: { select: { id: true, username: true, avatarUrl: true } } },
     });
-    res.json({ items });
+    res.json({ items: await resolveManyMediaUrls(items) });
   }),
 );
 

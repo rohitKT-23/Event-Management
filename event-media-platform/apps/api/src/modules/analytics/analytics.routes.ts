@@ -5,6 +5,7 @@ import { asyncHandler } from '../../lib/http.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { prisma } from '../../lib/prisma.js';
+import { resolveManyMediaUrls } from '../../services/s3.js';
 
 const router = Router();
 
@@ -71,7 +72,10 @@ router.get(
         include: { _count: { select: { likes: true, downloads: true } } },
       }),
     ]);
-    res.json({ mostLiked, mostDownloaded });
+    res.json({
+      mostLiked: await resolveManyMediaUrls(mostLiked),
+      mostDownloaded: await resolveManyMediaUrls(mostDownloaded),
+    });
   }),
 );
 

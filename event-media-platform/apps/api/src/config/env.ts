@@ -5,8 +5,14 @@
  * Zod so a missing/invalid var fails fast at startup rather than
  * leaking `undefined` deeper into the request path.
  */
-import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+// Load monorepo root .env (works when cwd is apps/api, apps/web, etc.)
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(configDir, '../../../../.env') });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -52,11 +58,16 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.coerce.number().int().optional(),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  EMAIL_FROM: z.string().default('no-reply@emp.local'),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('EMP <onboarding@resend.dev>'),
+
+  // Optional ClamAV daemon for upload virus scanning (graceful if unset).
+  CLAMAV_HOST: z.string().optional(),
+  CLAMAV_PORT: z.coerce.number().int().optional(),
+  VIRUS_SCAN_ENABLED: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().default(900_000),
   RATE_LIMIT_MAX: z.coerce.number().int().default(300),
